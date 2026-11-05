@@ -439,6 +439,7 @@ class StreamCursor(Cursor):
 
     def _invalidate_active_session(self) -> None:
         self._clear_current_cursor()
+        self._stream = None
         if self._session_owner is None:
             self._connection._invalidate_session()
             return
@@ -453,10 +454,12 @@ class StreamCursor(Cursor):
 
     def _clear_current_cursor(self) -> None:
         self._connection._clear_current_cursor(self)
+        self._connection._unregister_stream_cursor(self)
 
     def _register_current_cursor(self) -> None:
         if self._tx_context is not None:
             self._connection._set_current_cursor(self)
+        self._connection._register_stream_cursor(self)
 
     def _release_owned_session(self) -> None:
         if self._session_owner is None:
@@ -614,6 +617,7 @@ class StreamCursor(Cursor):
                 query=query,
                 parameters=parameters,
             )
+            self._register_current_cursor()
 
         self._prime_stream()
 
@@ -961,12 +965,6 @@ class AsyncStreamCursor(BufferedCursor):
         self._fill_buffer(result_list)
         self._finish_query()
 
-    async def executemany(
-        self, query: str, seq_of_parameters: Sequence[ParametersType]
-    ) -> None:
-        for parameters in seq_of_parameters:
-            await self.execute(query, parameters)
-
     async def _invalidate_active_session(self) -> None:
         self._clear_current_cursor()
         self._stream = None
@@ -983,10 +981,12 @@ class AsyncStreamCursor(BufferedCursor):
 
     def _clear_current_cursor(self) -> None:
         self._connection._clear_current_cursor(self)
+        self._connection._unregister_stream_cursor(self)
 
     def _register_current_cursor(self) -> None:
         if self._tx_context is not None:
             self._connection._set_current_cursor(self)
+        self._connection._register_stream_cursor(self)
 
     async def _release_owned_session(self) -> None:
         if self._session_owner is None:
@@ -1115,6 +1115,12 @@ class AsyncStreamCursor(BufferedCursor):
             settings=settings,
         )
 
+    async def executemany(
+        self, query: str, seq_of_parameters: Sequence[ParametersType]
+    ) -> None:
+        for parameters in seq_of_parameters:
+            await self.execute(query, parameters)
+
     async def execute(
         self,
         query: str,
@@ -1144,6 +1150,7 @@ class AsyncStreamCursor(BufferedCursor):
                 query=query,
                 parameters=parameters,
             )
+            self._register_current_cursor()
 
         await self._prime_stream()
 
