@@ -768,6 +768,7 @@ class TestConnection(BaseDBApiTestSuit):
     ) -> None:
         self._test_stream_cursor_interactive_transaction_guard(connection)
 
+
 class TestAsyncConnection(BaseDBApiTestSuit):
     @pytest_asyncio.fixture
     async def connection(

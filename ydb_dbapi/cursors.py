@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import functools
 import itertools
 from collections.abc import AsyncIterator
@@ -437,6 +438,7 @@ class StreamCursor(Cursor):
         self._session_owner: ydb.QuerySession | None = None
         self._rowcount_accumulator: int = 0
 
+    @handle_ydb_errors
     def _invalidate_active_session(self) -> None:
         self._clear_current_cursor()
         self._stream = None
@@ -542,7 +544,7 @@ class StreamCursor(Cursor):
     def _execute_session_query_stream(
         self,
         query: str,
-        parameters: ParametersType | None = None,
+        parameters: dict | None = None,
     ) -> SyncResponseContextIterator:
         settings = self._get_request_settings()
 
@@ -578,7 +580,7 @@ class StreamCursor(Cursor):
         self,
         tx_context: ydb.QueryTxContext,
         query: str,
-        parameters: ParametersType | None = None,
+        parameters: dict | None = None,
     ) -> SyncResponseContextIterator:
         settings = self._get_request_settings()
         return tx_context.execute(
@@ -653,28 +655,34 @@ class StreamCursor(Cursor):
 
         return result
 
+    @handle_ydb_errors
     def close(self) -> None:
         if self._state == CursorStatus.closed:
             return
 
-        if self._state == CursorStatus.running:
-            if self._session_owner is not None and self._stream is not None:
-                self._stream.cancel()
-                self._finalize_rowcount()
-                self._stream = None
-                self._discard_owned_session()
-            elif self._stream is not None:
-                with self._stream:
-                    pass
-                self._finish_stream()
-            else:
-                self._release_owned_session()
-                self._clear_current_cursor()
-
-        self._stream = None
-        self._session_owner = None
-        self._clear_current_cursor()
-        self._state = CursorStatus.closed
+        try:
+            if self._state == CursorStatus.running:
+                if (
+                    self._session_owner is not None
+                    and self._stream is not None
+                ):
+                    with contextlib.suppress(Exception):
+                        self._stream.cancel()
+                    self._finalize_rowcount()
+                    self._stream = None
+                    self._discard_owned_session()
+                elif self._stream is not None:
+                    with self._stream:
+                        pass
+                    self._finish_stream()
+                else:
+                    self._release_owned_session()
+                    self._clear_current_cursor()
+        finally:
+            self._stream = None
+            self._session_owner = None
+            self._clear_current_cursor()
+            self._state = CursorStatus.closed
 
 
 class AsyncCursor(BufferedCursor):
@@ -921,7 +929,7 @@ class AsyncStreamCursor(BufferedCursor):
     @handle_ydb_errors
     @invalidate_cursor_on_ydb_error
     async def _execute_generic_query(
-        self, query: str, parameters: ParametersType | None = None
+        self, query: str, parameters: dict | None = None
     ) -> list[ydb.convert.ResultSet]:
         settings = self._get_request_settings()
 
@@ -965,6 +973,7 @@ class AsyncStreamCursor(BufferedCursor):
         self._fill_buffer(result_list)
         self._finish_query()
 
+    @handle_ydb_errors
     async def _invalidate_active_session(self) -> None:
         self._clear_current_cursor()
         self._stream = None
@@ -1069,7 +1078,7 @@ class AsyncStreamCursor(BufferedCursor):
     async def _execute_session_query_stream(
         self,
         query: str,
-        parameters: ParametersType | None = None,
+        parameters: dict | None = None,
     ) -> AsyncResponseContextIterator:
         settings = self._get_request_settings()
 
@@ -1105,7 +1114,7 @@ class AsyncStreamCursor(BufferedCursor):
         self,
         tx_context: ydb.aio.QueryTxContext,
         query: str,
-        parameters: ParametersType | None = None,
+        parameters: dict | None = None,
     ) -> AsyncResponseContextIterator:
         settings = self._get_request_settings()
         return await tx_context.execute(
@@ -1189,28 +1198,34 @@ class AsyncStreamCursor(BufferedCursor):
     async def nextset(self) -> bool:
         return False
 
+    @handle_ydb_errors
     async def close(self) -> None:
         if self._state == CursorStatus.closed:
             return
 
-        if self._state == CursorStatus.running:
-            if self._session_owner is not None and self._stream is not None:
-                self._stream.cancel()
-                self._finalize_rowcount()
-                self._stream = None
-                await self._discard_owned_session()
-            elif self._stream is not None:
-                async with self._stream:
-                    pass
-                await self._finish_stream()
-            else:
-                await self._release_owned_session()
-                self._clear_current_cursor()
-
-        self._stream = None
-        self._session_owner = None
-        self._clear_current_cursor()
-        self._state = CursorStatus.closed
+        try:
+            if self._state == CursorStatus.running:
+                if (
+                    self._session_owner is not None
+                    and self._stream is not None
+                ):
+                    with contextlib.suppress(Exception):
+                        self._stream.cancel()
+                    self._finalize_rowcount()
+                    self._stream = None
+                    await self._discard_owned_session()
+                elif self._stream is not None:
+                    async with self._stream:
+                        pass
+                    await self._finish_stream()
+                else:
+                    await self._release_owned_session()
+                    self._clear_current_cursor()
+        finally:
+            self._stream = None
+            self._session_owner = None
+            self._clear_current_cursor()
+            self._state = CursorStatus.closed
 
     async def __aenter__(self) -> Self:
         return self

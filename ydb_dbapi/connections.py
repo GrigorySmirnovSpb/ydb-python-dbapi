@@ -351,23 +351,25 @@ class Connection(BaseConnection):
 
     @handle_ydb_errors
     def close(self) -> None:
-        for cursor in list(self._active_stream_cursors):
-            cursor.close()
-        self._active_stream_cursors.clear()
-        if self._current_cursor is not None:
-            self._current_cursor.close()
         try:
-            self.rollback()
+            for cursor in list(self._active_stream_cursors):
+                cursor.close()
+            self._active_stream_cursors.clear()
+            if self._current_cursor is not None:
+                self._current_cursor.close()
         finally:
-            self._tx_context = None
+            try:
+                self.rollback()
+            finally:
+                self._tx_context = None
 
-            if self._session:
-                self._session_pool.release(self._session)
-                self._session = None
+                if self._session:
+                    self._session_pool.release(self._session)
+                    self._session = None
 
-            if not self._shared_session_pool:
-                self._session_pool.stop()
-                self._driver.stop()
+                if not self._shared_session_pool:
+                    self._session_pool.stop()
+                    self._driver.stop()
 
     @handle_ydb_errors
     def describe(self, table_path: str) -> ydb.TableSchemeEntry:
@@ -463,6 +465,7 @@ class Connection(BaseConnection):
             settings=settings,
         )
 
+    @handle_ydb_errors
     def _invalidate_session(self) -> None:
         self._clear_current_cursor()
         if self._tx_context:
@@ -618,23 +621,25 @@ class AsyncConnection(BaseConnection):
 
     @handle_ydb_errors
     async def close(self) -> None:
-        for cursor in list(self._active_stream_cursors):
-            await cursor.close()
-        self._active_stream_cursors.clear()
-        if self._current_cursor is not None:
-            await self._current_cursor.close()
         try:
-            await self.rollback()
+            for cursor in list(self._active_stream_cursors):
+                await cursor.close()
+            self._active_stream_cursors.clear()
+            if self._current_cursor is not None:
+                await self._current_cursor.close()
         finally:
-            self._tx_context = None
+            try:
+                await self.rollback()
+            finally:
+                self._tx_context = None
 
-            if self._session:
-                await self._session_pool.release(self._session)
-                self._session = None
+                if self._session:
+                    await self._session_pool.release(self._session)
+                    self._session = None
 
-            if not self._shared_session_pool:
-                await self._session_pool.stop()
-                await self._driver.stop()
+                if not self._shared_session_pool:
+                    await self._session_pool.stop()
+                    await self._driver.stop()
 
     @handle_ydb_errors
     async def describe(self, table_path: str) -> ydb.TableSchemeEntry:
@@ -734,6 +739,7 @@ class AsyncConnection(BaseConnection):
             settings=settings,
         )
 
+    @handle_ydb_errors
     async def _invalidate_session(self) -> None:
         self._clear_current_cursor()
         if self._tx_context:

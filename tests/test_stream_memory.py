@@ -4,7 +4,6 @@ import tracemalloc
 from collections.abc import AsyncGenerator
 from collections.abc import Generator
 from inspect import iscoroutine
-from typing import Union
 
 import pytest
 import pytest_asyncio
@@ -17,7 +16,7 @@ BATCH_SIZE = 1_000
 PAYLOAD_SIZE = 256
 TABLE_NAME = "stream_memory_table"
 
-ConnectionType = Union[dbapi.Connection, dbapi.AsyncConnection]
+ConnectionType = dbapi.Connection | dbapi.AsyncConnection
 
 
 def maybe_await(obj: callable) -> any:
